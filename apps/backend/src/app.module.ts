@@ -4,11 +4,9 @@ import { ScheduleModule } from '@nestjs/schedule';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { DatabaseModule } from './database/database.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { ProductModule } from './modules/product/product.module';
+// import { DatabaseModule } from './database/database.module';
 import { SocketModule } from './modules/socket/socket.module';
-import { UsersModule } from './modules/users/users.module';
+import { WatchTogetherModule } from './modules/watch-together/watch-together.module';
 
 @Module({
   imports: [
@@ -17,11 +15,11 @@ import { UsersModule } from './modules/users/users.module';
       envFilePath: '.env',
     }),
     ScheduleModule.forRoot(),
-    DatabaseModule,
-    AuthModule,
-    UsersModule,
-    ProductModule,
+    // DatabaseModule,
+    // UsersModule,
+    // ProductModule,
     SocketModule,
+    WatchTogetherModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { useImmer } from "use-immer";
 import useApi from "@/hooks/use-api";
 
+import type { Product } from "shared-types";
 import type { UseProductsState } from "./types";
 
 export default function useProducts() {
@@ -21,7 +22,7 @@ export default function useProducts() {
     });
 
     try {
-      const response = await api.get("products").json<{ data: any[] }>();
+      const response = await api.get("products").json<{ data: Product[] }>();
       setState((draft) => {
         draft.products = response.data;
         draft.loading = false;

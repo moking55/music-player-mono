@@ -30,22 +30,24 @@ export function SocketProvider({ children }: SocketProviderProps) {
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
     const newSocket = io(url, {
-      autoConnect: false,
+      autoConnect: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: Infinity,
       transports: ["websocket", "polling"],
     });
 
-    newSocket.on("connect", () => {
-      setConnected(true);
-    });
+    const handleConnect = () => setConnected(true);
+    const handleDisconnect = () => setConnected(false);
 
-    newSocket.on("disconnect", () => {
-      setConnected(false);
-    });
-
-    newSocket.connect();
+    newSocket.on("connect", handleConnect);
+    newSocket.on("disconnect", handleDisconnect);
     setSocket(newSocket);
 
     return () => {
+      newSocket.off("connect", handleConnect);
+      newSocket.off("disconnect", handleDisconnect);
       newSocket.disconnect();
     };
   }, []);

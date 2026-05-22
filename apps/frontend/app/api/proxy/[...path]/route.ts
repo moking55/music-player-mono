@@ -16,7 +16,6 @@ async function proxyRequest(
   pathSegments: string[],
 ): Promise<Response> {
   const backendUrl = buildBackendUrl(pathSegments, request.nextUrl.search);
-  const token = request.cookies.get("token")?.value;
   const contentType = request.headers.get("content-type");
   const accept = request.headers.get("accept");
 
@@ -32,10 +31,6 @@ async function proxyRequest(
 
   // Avoid compressed upstream payloads that can break when re-streamed through Next route handlers.
   headers.set("accept-encoding", "identity");
-
-  if (token) {
-    headers.set("authorization", `Bearer ${token}`);
-  }
 
   let body: string | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {

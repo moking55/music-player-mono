@@ -13,8 +13,6 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 
 import { BaseControllerOperations } from '@/common/utils/base-operation';
 
-import { RequireAuth } from '../auth/decorators/require-auth.decorator';
-
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponse } from './interfaces/user.interface';
@@ -59,7 +57,6 @@ export class UsersController extends BaseControllerOperations<
   }
 
   @Post('search')
-  @RequireAuth()
   @ApiOperation({ summary: 'Search users by filter criteria' })
   @ApiResponse({
     status: 200,
@@ -79,7 +76,6 @@ export class UsersController extends BaseControllerOperations<
   }
 
   @Get()
-  @RequireAuth()
   @ApiOperation({ summary: 'Get all users' })
   @ApiResponse({
     status: 200,
@@ -95,7 +91,6 @@ export class UsersController extends BaseControllerOperations<
   }
 
   @Get('paginated')
-  @RequireAuth()
   @ApiOperation({ summary: 'Get paginated users' })
   @ApiResponse({
     status: 200,
@@ -115,7 +110,6 @@ export class UsersController extends BaseControllerOperations<
   }
 
   @Get(':id')
-  @RequireAuth()
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiParam({
     name: 'id',
@@ -140,7 +134,6 @@ export class UsersController extends BaseControllerOperations<
   }
 
   @Put(':id')
-  @RequireAuth()
   @ApiOperation({ summary: 'Update user by ID' })
   @ApiParam({
     name: 'id',
@@ -174,7 +167,6 @@ export class UsersController extends BaseControllerOperations<
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireAuth()
   @ApiOperation({ summary: 'Delete user by ID' })
   @ApiParam({
     name: 'id',

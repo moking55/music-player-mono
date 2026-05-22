@@ -1,7 +1,19 @@
 export { UserRole } from "./enums/user-role.enum";
 export { OrderStatus } from "./enums/order-status";
+export { PlayerState } from "./enums/watch/player-state.enum";
+export { RoomEvent } from "./enums/watch/room-event.enum";
 
-export type { LoginRequest, AuthResponse } from "./model/auth";
 export type { Users } from "./model/users";
 export type { ProductStatus } from "./enums/product-status";
 export type { Product } from "./model/product";
+export type { VideoItem, PlayerStateData, RoomData } from "./model/watch/room";
+export type {
+  JoinRoomPayload,
+  AddToQueuePayload,
+  SeekPayload,
+  SendDanmuPayload,
+  SendMemePayload,
+  PlayerStateUpdatePayload,
+  ForcePlayPayload,
+  ReorderQueuePayload,
+} from "./model/watch/watch-events";

@@ -1,17 +1,14 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronDown, LogOut } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import styles from "./header.module.css";
 import type { HeaderProps } from "./types";
 
 export default function Header({ className }: HeaderProps) {
-  const router = useRouter();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const displayName = "Admin";
   const initials = displayName.slice(0, 1).toUpperCase();
@@ -40,23 +37,6 @@ export default function Header({ className }: HeaderProps) {
     };
   }, [isOpen]);
 
-  async function handleLogout() {
-    if (isLoggingOut) return;
-
-    setIsLoggingOut(true);
-    setIsOpen(false);
-
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-      });
-    } finally {
-      router.push("/login");
-      router.refresh();
-      setIsLoggingOut(false);
-    }
-  }
-
   return (
     <header className={clsx(styles.header, className)}>
       <div className={styles.left}>
@@ -79,26 +59,6 @@ export default function Header({ className }: HeaderProps) {
               size={16}
             />
           </button>
-
-          {isOpen && (
-            <div className={styles.dropdown} role="menu" aria-label="Profile menu">
-              <div className={styles.dropdownHeader}>
-                <span className={styles.dropdownName}>{displayName}</span>
-                <span className={styles.dropdownRole}>ผู้ดูแลระบบ</span>
-              </div>
-
-              <button
-                type="button"
-                className={styles.dropdownItem}
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                role="menuitem"
-              >
-                <LogOut size={16} />
-                <span>{isLoggingOut ? "กำลังออกจากระบบ..." : "ออกจากระบบ"}</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </header>

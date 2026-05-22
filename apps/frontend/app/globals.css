@@ -168,3 +168,16 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes danmu {
+  0% {
+    transform: translateX(100vw);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-danmu {
+  animation: danmu linear forwards;
+}

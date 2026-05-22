@@ -23,6 +23,12 @@ trigger: always_on
     <bad-example>export * from "./types";</bad-example>
     <good-example>export type { FeatureContainerProps, UseFeatureReturn } from "./types";</good-example>
   </rule>
+  <rule id="5">
+    <title>Use Named Functions Over Arrow Functions</title>
+    <description>Always use named function declarations instead of arrow functions. This improves code readability, provides better stack traces for debugging, and maintains consistency across the codebase.</description>
+    <bad-example>const ComponentName = () => { ... }</bad-example>
+    <good-example>function ComponentName() { ... }</good-example>
+  </rule>
 </GoldenRules>
 
 You are working on the `apps/frontend` application within a monorepo. This is a **Next.js 16** application using **React 19** and **Tailwind CSS 4**.

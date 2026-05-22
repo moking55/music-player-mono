@@ -1,5 +1,11 @@
 [
   {
+    "label": "Watch Together",
+    "href": "/watch",
+    "icon": "heroicons:video-camera",
+    "requiredRole": ["admin"]
+  },
+  {
     "label": "แดชบอร์ด",
     "href": "/example/dashboard",
     "icon": "heroicons:chart-bar",

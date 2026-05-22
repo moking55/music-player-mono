@@ -5,7 +5,6 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import { json, urlencoded } from 'body-parser';
 import * as compression from 'compression';
-import * as session from 'express-session';
 
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception/http-exception.filter';
@@ -19,19 +18,6 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.use(
-    session({
-      secret: configService.get('SESSION_SECRET') || 'your-session-secret',
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        secure: false,
-        httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000,
-      },
-    }),
-  );
-
   app.setGlobalPrefix('api/v1');
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ limit: '50mb', extended: true }));
@@ -44,9 +30,7 @@ async function bootstrap() {
     .addServer(
       `http://localhost:${configService.get('APP_PORT') ?? 3001}`,
       'local development',
-    )
-    .addBearerAuth()
-    .addSecurityRequirements('bearer');
+    );
 
   app.useGlobalPipes(
     new ValidationPipe({

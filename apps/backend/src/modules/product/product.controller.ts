@@ -15,8 +15,9 @@ import { BaseControllerOperations } from '@/common/utils/base-operation';
 
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { ProductEntity } from './entities/product.entity';
 import { ProductService } from './product.service';
+
+import type { ProductEntity } from './entities/product.entity';
 
 @ApiTags('products')
 @Controller('products')

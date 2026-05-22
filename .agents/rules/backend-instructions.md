@@ -17,6 +17,12 @@ trigger: always_on
     <title>Respect Recent Edits</title>
     <description>Do not suggest code that has been deleted in recent edits. Focus on the current state of the codebase.</description>
   </rule>
+  <rule id="4">
+    <title>Use Named Functions Over Arrow Functions</title>
+    <description>Always use named function declarations instead of arrow functions. This improves code readability, provides better stack traces for debugging, and maintains consistency across the codebase.</description>
+    <bad-example>const handleRequest = (req: Request) => { ... }</bad-example>
+    <good-example>function handleRequest(req: Request) { ... }</good-example>
+  </rule>
 </GoldenRules>
 You are working on the `apps/backend` application within a monorepo. This is a **NestJS** application using **TypeORM** with **PostgreSQL**.
 
