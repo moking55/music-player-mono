@@ -19,7 +19,7 @@ COPY apps/frontend/tsconfig*.json apps/frontend/
 COPY apps/frontend/next.config.ts apps/frontend/
 COPY apps/frontend/postcss.config.mjs apps/frontend/
 COPY apps/frontend/eslint.config.mjs apps/frontend/
-COPY apps/frontend/middleware.ts apps/frontend/
+# COPY apps/frontend/middleware.ts apps/frontend/
 COPY apps/frontend/app apps/frontend/app
 COPY apps/frontend/public apps/frontend/public
 COPY apps/frontend/src apps/frontend/src
