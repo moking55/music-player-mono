@@ -372,4 +372,39 @@ export class WatchTogetherGateway
 
     return { event: RoomEvent.QUEUE_UPDATED, data: { queue } };
   }
+
+  @SubscribeMessage('reconnect-host')
+  async handleReconnectHost(
+    @MessageBody() payload: { roomId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const success = await this.watchService.reconnectHost(
+      payload.roomId,
+      client.id,
+    );
+    if (!success) {
+      client.emit('room-not-found', { roomId: payload.roomId });
+      return { event: 'room-not-found', data: { roomId: payload.roomId } };
+    }
+
+    this.logger.log(`Host reconnected to room ${payload.roomId}`);
+
+    this.watchService.broadcastToRoom(payload.roomId, 'host-reconnected', {
+      roomId: payload.roomId,
+    });
+
+    const room = await this.watchService.getRoom(payload.roomId);
+    if (room) {
+      client.emit('room-joined', {
+        ...this.watchService.toRoomData(room),
+        isHost: true,
+      });
+      client.emit('queue-updated', {
+        queue: room.queue,
+        currentIndex: room.currentIndex,
+      });
+    }
+
+    return { event: 'host-reconnected', data: { roomId: payload.roomId } };
+  }
 }

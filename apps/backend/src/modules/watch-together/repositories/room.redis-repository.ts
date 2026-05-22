@@ -41,6 +41,7 @@ export class RoomRedisRepository implements IRoomRepository {
         currentTime: 0,
         videoId: '',
       }),
+      forcePlayed: 'false',
     });
     pipeline.expire(this.roomKey(roomId), roomTtl);
     pipeline.hset('wt:host-map', hostSocketId, roomId);
@@ -75,6 +76,7 @@ export class RoomRedisRepository implements IRoomRepository {
       queue: queueJson.map((item) => JSON.parse(item) as VideoItem),
       currentIndex: parseInt(roomData.currentIndex, 10),
       playerState: JSON.parse(roomData.playerState) as PlayerState,
+      forcePlayed: roomData.forcePlayed === 'true',
     };
   }
 
@@ -218,6 +220,15 @@ export class RoomRedisRepository implements IRoomRepository {
   async decrementClientCount(roomId: string): Promise<number> {
     await this.refreshTTL(roomId);
     return this.redis.scard(`wt:clients:${roomId}`);
+  }
+
+  async setForcePlayed(roomId: string, forcePlayed: boolean): Promise<void> {
+    await this.redis.hset(
+      this.roomKey(roomId),
+      'forcePlayed',
+      String(forcePlayed),
+    );
+    await this.refreshTTL(roomId);
   }
 
   async refreshTTL(roomId: string): Promise<void> {

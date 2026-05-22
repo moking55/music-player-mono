@@ -50,7 +50,7 @@ export default function HostContainer() {
   const searchParams = useSearchParams();
   const roomId = searchParams.get("room");
 
-  const { joinRoom } = useWatchRoom();
+  const { joinRoom, reconnectHost, connected } = useWatchRoom();
   const {
     playerState,
     pendingCommand,
@@ -148,10 +148,22 @@ export default function HostContainer() {
     }
   }, [roomId, setState, skip, emitPlayerState]);
 
+  const wasConnectedRef = useRef(false);
+
   useEffect(() => {
     if (!roomId) return;
     joinRoom(roomId);
   }, [roomId, joinRoom]);
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    if (wasConnectedRef.current && connected) {
+      reconnectHost(roomId);
+    }
+
+    wasConnectedRef.current = connected;
+  }, [connected, roomId, reconnectHost]);
 
   useEffect(() => {
     const player = playerInstanceRef.current;

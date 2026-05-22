@@ -26,6 +26,7 @@ export class RoomMemoryRepository implements IRoomRepository {
         currentTime: 0,
         videoId: '',
       },
+      forcePlayed: false,
     });
     this.hostToRoom.set(hostSocketId, roomId);
     this.logger.debug(`Room created in memory: ${roomId}`);
@@ -171,6 +172,13 @@ export class RoomMemoryRepository implements IRoomRepository {
       room.clientCount = Math.max(0, room.clientCount - 1);
     }
     return room?.clientCount ?? 0;
+  }
+
+  async setForcePlayed(roomId: string, forcePlayed: boolean): Promise<void> {
+    const room = this.rooms.get(roomId);
+    if (room) {
+      room.forcePlayed = forcePlayed;
+    }
   }
 
   async refreshTTL(): Promise<void> {

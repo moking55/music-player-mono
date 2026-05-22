@@ -48,7 +48,7 @@ export default function ClientContainer() {
   const searchParams = useSearchParams();
   const roomId = searchParams.get("room");
 
-  const { joinRoom, connected, error: roomError } = useWatchRoom();
+  const { joinRoom, connected, hostDisconnected, error: roomError } = useWatchRoom();
   const { playerState, play, pause, seek } = usePlayerControl(roomId);
   const { queue, currentIndex, addToQueue, forcePlay, reorderQueue: reorderQueueFn, removeFromQueue: removeQueueFn } = useQueue(roomId);
   const { danmuList, sendDanmu } = useDanmu(roomId, { mode: "send" });
@@ -184,6 +184,16 @@ export default function ClientContainer() {
         <div key="error-banner" className="flex items-center gap-2 px-4 py-3 bg-red-900/30 border-b border-red-800 text-red-300">
           <AlertCircle size={16} />
           <p className="text-sm">{displayError}</p>
+        </div>
+      )}
+
+      {hostDisconnected && (
+        <div key="host-disconnected" className="absolute inset-0 flex items-center justify-center bg-gray-900/95 z-30">
+          <div className="text-center px-4">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-yellow-400 border-t-transparent mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-yellow-400 mb-2">Host Disconnected</h2>
+            <p className="text-gray-400">Waiting for host to reconnect...</p>
+          </div>
         </div>
       )}
 

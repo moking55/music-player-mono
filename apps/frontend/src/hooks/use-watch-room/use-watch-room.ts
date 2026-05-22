@@ -11,6 +11,7 @@ type WatchRoomState = {
   roomId: string | null;
   roomData: RoomData | null;
   isHost: boolean;
+  hostDisconnected: boolean;
   error: string | null;
 };
 
@@ -22,6 +23,7 @@ export default function useWatchRoom() {
     roomId: null,
     roomData: null,
     isHost: false,
+    hostDisconnected: false,
     error: null,
   });
 
@@ -33,6 +35,7 @@ export default function useWatchRoom() {
         draft.roomData = data;
         draft.isHost = data.isHost ?? draft.isHost;
         draft.error = null;
+        draft.hostDisconnected = false;
       });
     };
 
@@ -54,7 +57,15 @@ export default function useWatchRoom() {
 
     const handleHostDisconnected = () => {
       setState((draft) => {
-        draft.error = "Host disconnected. Waiting for reconnection...";
+        draft.hostDisconnected = true;
+        draft.error = null;
+      });
+    };
+
+    const handleHostReconnected = () => {
+      setState((draft) => {
+        draft.hostDisconnected = false;
+        draft.error = null;
       });
     };
 
@@ -62,25 +73,28 @@ export default function useWatchRoom() {
     on("room-not-found", handleRoomNotFound);
     on("room-destroyed", handleRoomDestroyed);
     on("host-disconnected", handleHostDisconnected);
+    on("host-reconnected", handleHostReconnected);
 
     return () => {
       off("room-joined", handleRoomJoined);
       off("room-not-found", handleRoomNotFound);
       off("room-destroyed", handleRoomDestroyed);
       off("host-disconnected", handleHostDisconnected);
+      off("host-reconnected", handleHostReconnected);
     };
   }, [on, off, setState]);
 
   useEffect(() => {
-    if (state.roomId && state.isHost) {
+    if (state.roomId && state.isHost && !state.hostDisconnected) {
       router.push(`/watch/host?room=${state.roomId}`);
     }
-  }, [state.roomId, state.isHost, router]);
+  }, [state.roomId, state.isHost, state.hostDisconnected, router]);
 
   const createRoom = useCallback(() => {
     setState((draft) => {
       draft.error = null;
       draft.isHost = true;
+      draft.hostDisconnected = false;
     });
     emit("create-room");
   }, [emit, setState]);
@@ -90,10 +104,18 @@ export default function useWatchRoom() {
       setState((draft) => {
         draft.error = null;
         draft.isHost = false;
+        draft.hostDisconnected = false;
       });
       emit("join-room", { roomId });
     },
     [emit, setState],
+  );
+
+  const reconnectHost = useCallback(
+    (roomId: string) => {
+      emit("reconnect-host", { roomId });
+    },
+    [emit],
   );
 
   const leaveRoom = useCallback(() => {
@@ -101,6 +123,7 @@ export default function useWatchRoom() {
       draft.roomId = null;
       draft.roomData = null;
       draft.isHost = false;
+      draft.hostDisconnected = false;
       draft.error = null;
     });
   }, [setState]);
@@ -124,9 +147,11 @@ export default function useWatchRoom() {
     roomId: state.roomId,
     roomData: state.roomData,
     isHost: state.isHost,
+    hostDisconnected: state.hostDisconnected,
     error: state.error,
     createRoom,
     joinRoom,
+    reconnectHost,
     leaveRoom,
     navigateToHost,
     navigateToClient,

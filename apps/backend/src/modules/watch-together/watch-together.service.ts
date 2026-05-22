@@ -55,23 +55,29 @@ export class WatchTogetherService {
       return null;
     }
 
-    const isReconnectHost = !room.hostSocketId;
-
-    if (isReconnectHost) {
-      await this.repository.updateHostSocketId(roomId, clientSocketId);
-    } else {
-      await this.repository.joinRoom(roomId, clientSocketId);
-    }
+    await this.repository.joinRoom(roomId, clientSocketId);
 
     const updatedRoom = await this.repository.getRoom(roomId);
     if (!updatedRoom) {
       return null;
     }
 
-    this.logger.log(
-      `Client ${clientSocketId} joined room ${roomId}${isReconnectHost ? ' (as host)' : ''}`,
-    );
-    return { ...this.toRoomData(updatedRoom), isHost: isReconnectHost };
+    this.logger.log(`Client ${clientSocketId} joined room ${roomId}`);
+    return this.toRoomData(updatedRoom);
+  }
+
+  async reconnectHost(
+    roomId: string,
+    hostSocketId: string,
+  ): Promise<boolean> {
+    const room = await this.repository.getRoom(roomId);
+    if (!room) {
+      return false;
+    }
+
+    await this.repository.updateHostSocketId(roomId, hostSocketId);
+    this.logger.log(`Host reconnected to room ${roomId}: ${hostSocketId}`);
+    return true;
   }
 
   async leaveRoom(roomId: string, clientSocketId: string): Promise<void> {
@@ -151,6 +157,15 @@ export class WatchTogetherService {
       return null;
     }
 
+    if (room.forcePlayed) {
+      room.currentIndex = 0;
+      await this.repository.setCurrentIndex(roomId, 0);
+      await this.repository.setQueue(roomId, room.queue);
+      await this.repository.setForcePlayed(roomId, false);
+      this.logger.log(`Force-played video ended, reset to index 0 in room ${roomId}`);
+      return room.queue[0];
+    }
+
     if (room.currentIndex >= room.queue.length) {
       room.currentIndex = room.queue.length - 1;
     }
@@ -183,6 +198,7 @@ export class WatchTogetherService {
       return null;
     }
     await this.repository.setCurrentIndex(roomId, index);
+    await this.repository.setForcePlayed(roomId, true);
     this.logger.log(`Force play video at index ${index} in room ${roomId}`);
     return room.queue[index];
   }

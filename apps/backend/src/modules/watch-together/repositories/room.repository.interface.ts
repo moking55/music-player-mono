@@ -13,6 +13,7 @@ export interface InternalRoom {
   queue: VideoItem[];
   currentIndex: number;
   playerState: PlayerState;
+  forcePlayed: boolean;
 }
 
 export interface IRoomRepository {
@@ -39,5 +40,6 @@ export interface IRoomRepository {
   getClientCount(roomId: string): Promise<number>;
   incrementClientCount(roomId: string): Promise<number>;
   decrementClientCount(roomId: string): Promise<number>;
+  setForcePlayed(roomId: string, forcePlayed: boolean): Promise<void>;
   refreshTTL(roomId: string): Promise<void>;
 }
