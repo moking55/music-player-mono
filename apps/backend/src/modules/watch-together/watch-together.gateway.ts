@@ -403,6 +403,22 @@ export class WatchTogetherGateway
         queue: room.queue,
         currentIndex: room.currentIndex,
       });
+
+      const currentVideo =
+        room.currentIndex >= 0 && room.currentIndex < room.queue.length
+          ? room.queue[room.currentIndex]
+          : null;
+      if (currentVideo) {
+        client.emit(RoomEvent.CMD_SKIP, {
+          videoId: currentVideo.videoId,
+        });
+      }
+
+      this.watchService.broadcastToRoom(
+        payload.roomId,
+        RoomEvent.PLAYER_STATE_UPDATE,
+        room.playerState,
+      );
     }
 
     return { event: 'host-reconnected', data: { roomId: payload.roomId } };

@@ -152,8 +152,8 @@ export default function HostContainer() {
 
   useEffect(() => {
     if (!roomId) return;
-    joinRoom(roomId);
-  }, [roomId, joinRoom]);
+    reconnectHost(roomId);
+  }, [roomId, reconnectHost]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -197,7 +197,7 @@ export default function HostContainer() {
     }
 
     clearPendingCommand();
-  }, [pendingCommand, clearPendingCommand]);
+  }, [pendingCommand, clearPendingCommand, state.isReady]);
 
   useEffect(() => {
     const player = playerInstanceRef.current;
