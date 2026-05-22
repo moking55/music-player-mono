@@ -5,13 +5,24 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import { json, urlencoded } from 'body-parser';
 import * as compression from 'compression';
+import Redis from 'ioredis';
 
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception/http-exception.filter';
+import { RedisIoAdapter } from './redis/redis-io.adapter';
+import { RedisService } from './redis/redis.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+
+  const redisService = app.get(RedisService);
+  if (redisService.isAvailable) {
+    const redisIoAdapter = new RedisIoAdapter(app);
+    const redis = app.get(Redis);
+    await redisIoAdapter.connectToRedis(redis);
+    app.useWebSocketAdapter(redisIoAdapter);
+  }
 
   app.enableCors({
     origin: '*',

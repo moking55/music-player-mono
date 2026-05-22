@@ -163,7 +163,7 @@ export default function ClientContainer() {
 
   return (
     <main className="min-h-screen bg-gray-900 relative overflow-hidden flex flex-col">
-      <header className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+      <header key="header" className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-2">
           <span className="text-sm font-mono text-gray-300">Room: {roomId}</span>
           {connected ? (
@@ -181,25 +181,25 @@ export default function ClientContainer() {
       </header>
 
       {displayError && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-900/30 border-b border-red-800 text-red-300">
+        <div key="error-banner" className="flex items-center gap-2 px-4 py-3 bg-red-900/30 border-b border-red-800 text-red-300">
           <AlertCircle size={16} />
           <p className="text-sm">{displayError}</p>
         </div>
       )}
 
-      <div ref={playerRef} className="w-full h-48 sm:h-64 md:h-80 lg:h-96 flex-shrink-0" />
+      <div key="player" ref={playerRef} className="w-full h-48 sm:h-64 md:h-80 lg:h-96 flex-shrink-0" />
 
-      <DanmuOverlay danmuList={danmuList} />
+      <DanmuOverlay key="danmu-overlay" danmuList={danmuList} />
 
       {currentMeme && (
-        <MemeModal
+        <MemeModal key="meme-modal"
           base64={currentMeme.startsWith("data:") ? currentMeme : undefined}
           imageUrl={currentMeme.startsWith("data:") ? undefined : currentMeme}
         />
       )}
 
       {!state.isReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 z-20">
+        <div key="loading" className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 z-20">
           <div className="text-center">
             <div className="h-12 w-12 animate-spin rounded-full border-4 border-white border-t-transparent mx-auto mb-4" />
             <p className="text-gray-400">Loading player...</p>
@@ -208,7 +208,7 @@ export default function ClientContainer() {
       )}
 
       {state.isReady && (
-        <div className="flex-1 flex flex-col min-h-0">
+        <div key="content" className="flex-1 flex flex-col min-h-0">
           <PlaybackControls
             isPlaying={playerState.playing}
             currentTime={playerState.currentTime}

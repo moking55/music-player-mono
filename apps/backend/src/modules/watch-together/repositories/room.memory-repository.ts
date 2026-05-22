@@ -133,6 +133,26 @@ export class RoomMemoryRepository implements IRoomRepository {
     this.hostToRoom.delete(hostSocketId);
   }
 
+  async clearHostSocketId(roomId: string): Promise<void> {
+    const room = this.rooms.get(roomId);
+    if (room) {
+      this.hostToRoom.delete(room.hostSocketId);
+      room.hostSocketId = '';
+    }
+  }
+
+  async updateHostSocketId(
+    roomId: string,
+    newHostSocketId: string,
+  ): Promise<void> {
+    const room = this.rooms.get(roomId);
+    if (room) {
+      this.hostToRoom.delete(room.hostSocketId);
+      room.hostSocketId = newHostSocketId;
+      this.hostToRoom.set(newHostSocketId, roomId);
+    }
+  }
+
   async getClientCount(roomId: string): Promise<number> {
     return this.rooms.get(roomId)?.clientCount ?? 0;
   }

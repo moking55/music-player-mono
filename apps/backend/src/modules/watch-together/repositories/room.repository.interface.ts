@@ -34,6 +34,8 @@ export interface IRoomRepository {
   getRoomIdByHost(hostSocketId: string): Promise<string | null>;
   setHostRoomMapping(hostSocketId: string, roomId: string): Promise<void>;
   removeHostMapping(hostSocketId: string): Promise<void>;
+  clearHostSocketId(roomId: string): Promise<void>;
+  updateHostSocketId(roomId: string, newHostSocketId: string): Promise<void>;
   getClientCount(roomId: string): Promise<number>;
   incrementClientCount(roomId: string): Promise<number>;
   decrementClientCount(roomId: string): Promise<number>;

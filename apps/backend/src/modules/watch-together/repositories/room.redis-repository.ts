@@ -184,6 +184,28 @@ export class RoomRedisRepository implements IRoomRepository {
     await this.redis.hdel('wt:host-map', hostSocketId);
   }
 
+  async clearHostSocketId(roomId: string): Promise<void> {
+    await this.redis.hset(this.roomKey(roomId), 'hostSocketId', '');
+  }
+
+  async updateHostSocketId(
+    roomId: string,
+    newHostSocketId: string,
+  ): Promise<void> {
+    const oldHostId = await this.redis.hget(
+      this.roomKey(roomId),
+      'hostSocketId',
+    );
+    const pipeline = this.redis.pipeline();
+    pipeline.hset(this.roomKey(roomId), 'hostSocketId', newHostSocketId);
+    if (oldHostId) {
+      pipeline.hdel('wt:host-map', oldHostId);
+    }
+    pipeline.hset('wt:host-map', newHostSocketId, roomId);
+    await pipeline.exec();
+    await this.refreshTTL(roomId);
+  }
+
   async getClientCount(roomId: string): Promise<number> {
     return this.redis.scard(`wt:clients:${roomId}`);
   }

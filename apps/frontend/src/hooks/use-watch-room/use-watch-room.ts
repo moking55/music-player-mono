@@ -52,14 +52,22 @@ export default function useWatchRoom() {
       });
     };
 
+    const handleHostDisconnected = () => {
+      setState((draft) => {
+        draft.error = "Host disconnected. Waiting for reconnection...";
+      });
+    };
+
     on("room-joined", handleRoomJoined);
     on("room-not-found", handleRoomNotFound);
     on("room-destroyed", handleRoomDestroyed);
+    on("host-disconnected", handleHostDisconnected);
 
     return () => {
       off("room-joined", handleRoomJoined);
       off("room-not-found", handleRoomNotFound);
       off("room-destroyed", handleRoomDestroyed);
+      off("host-disconnected", handleHostDisconnected);
     };
   }, [on, off, setState]);
 

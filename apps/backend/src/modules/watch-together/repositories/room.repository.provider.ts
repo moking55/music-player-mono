@@ -13,8 +13,11 @@ export const roomRepositoryToken = 'IRoomRepository';
 export const roomRepositoryProvider: FactoryProvider<IRoomRepository> = {
   provide: roomRepositoryToken,
   inject: [RedisService, Redis],
-  useFactory: (redisService: RedisService, redis: Redis): IRoomRepository => {
-    if (redisService.isAvailable) {
+  useFactory: async (redisService: RedisService, redis: Redis): Promise<IRoomRepository> => {
+    const available = redisService.isAvailable
+      || await redis.ping().then(() => true).catch(() => false);
+
+    if (available) {
       return new RoomRedisRepository(redis);
     }
     return new RoomMemoryRepository();

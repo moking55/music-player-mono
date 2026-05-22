@@ -48,20 +48,30 @@ export class WatchTogetherService {
   async joinRoom(
     roomId: string,
     clientSocketId: string,
-  ): Promise<RoomData | null> {
+  ): Promise<(RoomData & { isHost?: boolean }) | null> {
     const room = await this.repository.getRoom(roomId);
     if (!room) {
       this.logger.warn(`Join failed: room ${roomId} not found`);
       return null;
     }
-    await this.repository.joinRoom(roomId, clientSocketId);
+
+    const isReconnectHost = !room.hostSocketId;
+
+    if (isReconnectHost) {
+      await this.repository.updateHostSocketId(roomId, clientSocketId);
+    } else {
+      await this.repository.joinRoom(roomId, clientSocketId);
+    }
+
     const updatedRoom = await this.repository.getRoom(roomId);
     if (!updatedRoom) {
       return null;
     }
 
-    this.logger.log(`Client ${clientSocketId} joined room ${roomId}`);
-    return this.toRoomData(updatedRoom);
+    this.logger.log(
+      `Client ${clientSocketId} joined room ${roomId}${isReconnectHost ? ' (as host)' : ''}`,
+    );
+    return { ...this.toRoomData(updatedRoom), isHost: isReconnectHost };
   }
 
   async leaveRoom(roomId: string, clientSocketId: string): Promise<void> {
@@ -72,8 +82,9 @@ export class WatchTogetherService {
   async handleHostDisconnect(hostSocketId: string): Promise<string | null> {
     const roomId = await this.repository.getRoomIdByHost(hostSocketId);
     if (roomId) {
-      await this.repository.deleteRoom(roomId);
-      this.logger.log(`Room ${roomId} destroyed (host disconnected)`);
+      await this.repository.clearHostSocketId(roomId);
+      await this.repository.removeHostMapping(hostSocketId);
+      this.logger.log(`Host disconnected from room ${roomId}, room preserved`);
       return roomId;
     }
     return null;
@@ -127,18 +138,28 @@ export class WatchTogetherService {
 
   async getNextVideo(roomId: string): Promise<VideoItem | null> {
     const room = await this.repository.getRoom(roomId);
-    if (!room) {
+    if (!room || room.currentIndex < 0 || room.queue.length === 0) {
       return null;
     }
 
-    const newIndex = room.currentIndex + 1;
-    if (newIndex >= room.queue.length) {
-      await this.repository.setCurrentIndex(roomId, room.queue.length - 1);
+    room.queue.splice(room.currentIndex, 1);
+
+    if (room.queue.length === 0) {
+      await this.repository.setQueue(roomId, []);
+      await this.repository.setCurrentIndex(roomId, -1);
+      this.logger.log(`Queue empty after removing last video in room ${roomId}`);
       return null;
     }
 
-    await this.repository.setCurrentIndex(roomId, newIndex);
-    return room.queue[newIndex];
+    if (room.currentIndex >= room.queue.length) {
+      room.currentIndex = room.queue.length - 1;
+    }
+
+    await this.repository.setQueue(roomId, room.queue);
+    await this.repository.setCurrentIndex(roomId, room.currentIndex);
+
+    this.logger.log(`Advanced to next video in room ${roomId}`);
+    return room.queue[room.currentIndex];
   }
 
   async getCurrentVideo(roomId: string): Promise<VideoItem | null> {

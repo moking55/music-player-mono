@@ -1,4 +1,4 @@
-import { Inject, Logger, Optional } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -33,17 +33,11 @@ export class WatchTogetherGateway
 
   private readonly logger = new Logger(WatchTogetherGateway.name);
 
-  constructor(
-    private readonly watchService: WatchTogetherService,
-    @Optional() @Inject('SOCKET_IO_ADAPTER') private readonly adapter: unknown,
-  ) {}
+  constructor(private readonly watchService: WatchTogetherService) {}
 
   async handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
     this.watchService.setServer(this.server);
-    if (this.adapter) {
-      this.server.adapter(this.adapter as any);
-    }
   }
 
   async handleDisconnect(client: Socket) {
@@ -51,7 +45,9 @@ export class WatchTogetherGateway
 
     const hostRoomId = await this.watchService.handleHostDisconnect(client.id);
     if (hostRoomId) {
-      this.server.to(hostRoomId).emit('room-destroyed', { roomId: hostRoomId });
+      this.watchService.broadcastToRoom(hostRoomId, 'host-disconnected', {
+        roomId: hostRoomId,
+      });
       return;
     }
 
@@ -102,6 +98,11 @@ export class WatchTogetherGateway
 
     void client.join(payload.roomId);
     client.emit(RoomEvent.ROOM_JOINED, roomData);
+
+    client.emit(RoomEvent.QUEUE_UPDATED, {
+      queue: roomData.queue,
+      currentIndex: roomData.currentIndex,
+    });
 
     this.watchService.broadcastToRoom(
       payload.roomId,
