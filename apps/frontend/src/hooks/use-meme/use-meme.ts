@@ -42,7 +42,7 @@ export default function useMeme(
         setState((draft) => {
           draft.currentMeme = null;
         });
-      }, 5000);
+      }, 8000);
     };
 
     on("meme", handleMeme);

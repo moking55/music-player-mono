@@ -24,12 +24,12 @@ export default function QRCode({ roomId, variant = "idle" }: QRCodeProps) {
   if (variant === "playing") {
     return (
       <div className="absolute bottom-4 left-4 z-10">
-        <Card className="bg-black/60 backdrop-blur border-gray-700 p-2">
-          <CardContent className="p-0 flex items-center gap-2">
-            <QRCodeSVG value={joinUrl} size={64} bgColor="transparent" fgColor="white" />
+        <Card className="bg-black/60 backdrop-blur border-gray-700 p-3">
+          <CardContent className="p-0 flex items-center gap-3">
+            <QRCodeSVG value={joinUrl} size={96} bgColor="transparent" fgColor="white" />
             <div className="pr-2">
               <p className="text-xs text-gray-400">Join Code</p>
-              <p className="text-sm font-mono font-bold text-white tracking-widest">{roomId}</p>
+              <p className="text-lg font-mono font-bold text-white tracking-widest">{roomId}</p>
               <Button
                 variant="ghost"
                 size="sm"
