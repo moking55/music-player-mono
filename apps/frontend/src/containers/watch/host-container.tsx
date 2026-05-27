@@ -234,6 +234,14 @@ export default function HostContainer() {
 
       {state.isReady && (
         <>
+          {process.env.NEXT_PUBLIC_LEFT_WIDGET && queue.length > 0 && (
+            <iframe
+              src={process.env.NEXT_PUBLIC_LEFT_WIDGET}
+              className="absolute left-4 top-1/2 -translate-y-1/2 w-64 h-96 z-10 rounded-lg border border-gray-700 bg-black/70 backdrop-blur"
+              title="Left Widget"
+            />
+          )}
+
           <DanmuOverlay danmuList={danmuList} onRemove={removeDanmu} />
 
           {currentMeme && (
