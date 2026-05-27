@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { MemeModalProps } from "./types";
+import ConfettiBomb from "@/components/watch/confetti-bomb";
 
 export default function MemeModal({ imageUrl, base64, onDismiss }: MemeModalProps) {
+  const [showConfetti, setShowConfetti] = useState(true);
+
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -24,6 +27,8 @@ export default function MemeModal({ imageUrl, base64, onDismiss }: MemeModalProp
       role="dialog"
       aria-modal="true"
     >
+      <ConfettiBomb active={showConfetti} onComplete={() => setShowConfetti(false)} />
+
       <div
         className="max-w-lg w-full mx-4 animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
