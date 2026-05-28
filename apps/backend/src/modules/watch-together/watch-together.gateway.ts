@@ -387,6 +387,8 @@ export class WatchTogetherGateway
       return { event: 'room-not-found', data: { roomId: payload.roomId } };
     }
 
+    void client.join(payload.roomId);
+
     this.logger.log(`Host reconnected to room ${payload.roomId}`);
 
     this.watchService.broadcastToRoom(payload.roomId, 'host-reconnected', {
