@@ -16,8 +16,10 @@ import {
   SendMemePayload,
 } from 'shared-types';
 import { Server, Socket } from 'socket.io';
+import { WsException } from '@nestjs/websockets';
 
 import { WatchTogetherService } from './watch-together.service';
+import { MemeStorageService } from './meme-storage.service';
 
 import type {
   OnGatewayConnection,
@@ -33,7 +35,14 @@ export class WatchTogetherGateway
 
   private readonly logger = new Logger(WatchTogetherGateway.name);
 
-  constructor(private readonly watchService: WatchTogetherService) {}
+  constructor(
+    private readonly watchService: WatchTogetherService,
+    private readonly memeStorageService: MemeStorageService,
+  ) {}
+
+  private async isAuthorized(roomId: string, socketId: string): Promise<boolean> {
+    return this.watchService.isSocketInRoom(roomId, socketId);
+  }
 
   async handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
@@ -137,8 +146,11 @@ export class WatchTogetherGateway
   @SubscribeMessage(RoomEvent.PLAY)
   async handlePlay(
     @MessageBody() payload: { roomId: string },
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
     const room = await this.watchService.getRoom(payload.roomId);
     if (!room) {
       return;
@@ -151,8 +163,11 @@ export class WatchTogetherGateway
   @SubscribeMessage(RoomEvent.PAUSE)
   async handlePause(
     @MessageBody() payload: { roomId: string },
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
     const room = await this.watchService.getRoom(payload.roomId);
     if (!room) {
       return;
@@ -165,8 +180,11 @@ export class WatchTogetherGateway
   @SubscribeMessage(RoomEvent.SEEK)
   async handleSeek(
     @MessageBody() payload: SeekPayload,
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
     const room = await this.watchService.getRoom(payload.roomId);
     if (!room) {
       return;
@@ -181,32 +199,30 @@ export class WatchTogetherGateway
   @SubscribeMessage(RoomEvent.SKIP)
   async handleSkip(
     @MessageBody() payload: { roomId: string },
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
     const room = await this.watchService.getRoom(payload.roomId);
     if (!room) {
       return;
     }
 
-    const nextVideo = await this.watchService.getNextVideo(payload.roomId);
-    const updatedRoom = await this.watchService.getRoom(payload.roomId);
-    if (updatedRoom) {
-      this.watchService.broadcastToRoom(
-        payload.roomId,
-        RoomEvent.QUEUE_UPDATED,
-        {
-          queue: updatedRoom.queue,
-          currentIndex: updatedRoom.currentIndex,
-        },
-      );
-    }
-
-    if (nextVideo) {
-      this.watchService.sendToHost(room.hostSocketId, RoomEvent.CMD_SKIP, {
-        videoId: nextVideo.videoId,
+    const result = await this.watchService.getNextVideo(payload.roomId);
+    if (result) {
+      this.watchService.broadcastToRoom(payload.roomId, RoomEvent.QUEUE_UPDATED, {
+        queue: result.queue,
+        currentIndex: result.currentIndex,
       });
     }
-    return { event: RoomEvent.CMD_SKIP, data: nextVideo };
+
+    if (result?.video) {
+      this.watchService.sendToHost(result.hostSocketId, RoomEvent.CMD_SKIP, {
+        videoId: result.video.videoId,
+      });
+    }
+    return { event: RoomEvent.CMD_SKIP, data: result?.video ?? null };
   }
 
   @SubscribeMessage(RoomEvent.ADD_TO_QUEUE)
@@ -214,41 +230,30 @@ export class WatchTogetherGateway
     @MessageBody() payload: AddToQueuePayload,
     @ConnectedSocket() client: Socket,
   ) {
-    const queue = await this.watchService.addToQueue(
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
+    const result = await this.watchService.addToQueue(
       payload.roomId,
       payload,
       client.id,
     );
-
-    const room = await this.watchService.getRoom(payload.roomId);
-    if (room) {
-      this.watchService.broadcastToRoom(
-        payload.roomId,
-        RoomEvent.QUEUE_UPDATED,
-        {
-          queue,
-          currentIndex: room.currentIndex,
-        },
-      );
+    if (!result) {
+      return;
     }
 
-    if (room && room.queue.length === 1 && room.currentIndex === -1) {
-      await this.watchService.forcePlayVideo(payload.roomId, 0);
-      const firstVideo = room.queue[0];
-      this.watchService.broadcastToRoom(
-        payload.roomId,
-        RoomEvent.QUEUE_UPDATED,
-        {
-          queue: room.queue,
-          currentIndex: 0,
-        },
-      );
-      this.watchService.sendToHost(room.hostSocketId, RoomEvent.CMD_SKIP, {
-        videoId: firstVideo.videoId,
+    this.watchService.broadcastToRoom(payload.roomId, RoomEvent.QUEUE_UPDATED, {
+      queue: result.queue,
+      currentIndex: result.currentIndex,
+    });
+
+    if (result.firstVideo) {
+      this.watchService.sendToHost(result.hostSocketId, RoomEvent.CMD_SKIP, {
+        videoId: result.firstVideo.videoId,
       });
     }
 
-    return { event: RoomEvent.QUEUE_UPDATED, data: { queue } };
+    return { event: RoomEvent.QUEUE_UPDATED, data: { queue: result.queue } };
   }
 
   @SubscribeMessage(RoomEvent.SEND_DANMU)
@@ -270,16 +275,22 @@ export class WatchTogetherGateway
   @SubscribeMessage(RoomEvent.SEND_MEME)
   async handleSendMeme(
     @MessageBody() payload: SendMemePayload,
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      throw new WsException('Socket is not a member of this room');
+    }
+
+    if (!this.memeStorageService.isPublicMemeUrl(payload.imageUrl)) {
+      throw new WsException('Invalid meme image URL');
+    }
+
     const room = await this.watchService.getRoom(payload.roomId);
     if (!room) {
       return;
     }
 
-    const memeData = payload.base64
-      ? { base64: payload.base64 }
-      : { imageUrl: payload.imageUrl };
+    const memeData = { imageUrl: payload.imageUrl };
 
     this.watchService.sendToHost(room.hostSocketId, RoomEvent.MEME, memeData);
     return { event: RoomEvent.MEME, data: memeData };
@@ -288,89 +299,98 @@ export class WatchTogetherGateway
   @SubscribeMessage(RoomEvent.FORCE_PLAY)
   async handleForcePlay(
     @MessageBody() payload: { roomId: string; index: number },
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
     const room = await this.watchService.getRoom(payload.roomId);
     if (!room) {
       return;
     }
 
-    const video = await this.watchService.forcePlayVideo(
+    const result = await this.watchService.forcePlayVideo(
       payload.roomId,
       payload.index,
     );
-    if (video) {
+    if (result) {
       this.watchService.broadcastToRoom(
         payload.roomId,
         RoomEvent.QUEUE_UPDATED,
         {
-          queue: room.queue,
-          currentIndex: room.currentIndex,
+          queue: result.queue,
+          currentIndex: result.currentIndex,
         },
       );
-      this.watchService.sendToHost(room.hostSocketId, RoomEvent.CMD_SKIP, {
-        videoId: video.videoId,
+      this.watchService.sendToHost(result.hostSocketId, RoomEvent.CMD_SKIP, {
+        videoId: result.video?.videoId,
       });
     }
 
-    return { event: RoomEvent.CMD_SKIP, data: video };
+    return { event: RoomEvent.CMD_SKIP, data: result?.video ?? null };
   }
 
   @SubscribeMessage(RoomEvent.REORDER_QUEUE)
   async handleReorderQueue(
     @MessageBody()
     payload: { roomId: string; fromIndex: number; toIndex: number },
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
     const room = await this.watchService.getRoom(payload.roomId);
     if (!room) {
       return;
     }
 
-    const queue = await this.watchService.reorderQueue(
+    const result = await this.watchService.reorderQueue(
       payload.roomId,
       payload.fromIndex,
       payload.toIndex,
     );
+    if (!result) {
+      return;
+    }
 
     this.watchService.broadcastToRoom(payload.roomId, RoomEvent.QUEUE_UPDATED, {
-      queue,
-      currentIndex: room.currentIndex,
+      queue: result.queue,
+      currentIndex: result.currentIndex,
     });
 
-    return { event: RoomEvent.QUEUE_UPDATED, data: { queue } };
+    return { event: RoomEvent.QUEUE_UPDATED, data: { queue: result.queue } };
   }
 
   @SubscribeMessage(RoomEvent.REMOVE_FROM_QUEUE)
   async handleRemoveFromQueue(
     @MessageBody() payload: { roomId: string; index: number },
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
     const room = await this.watchService.getRoom(payload.roomId);
     if (!room) {
       return;
     }
 
-    const queue = await this.watchService.removeFromQueue(
+    const result = await this.watchService.removeFromQueue(
       payload.roomId,
       payload.index,
     );
-
-    if (room.currentIndex === payload.index && queue.length > 0) {
-      const nextVideo = queue[room.currentIndex] ?? queue[queue.length - 1];
-      if (nextVideo) {
-        this.watchService.sendToHost(room.hostSocketId, RoomEvent.CMD_SKIP, {
-          videoId: nextVideo.videoId,
-        });
-      }
+    if (!result) {
+      return;
     }
 
     this.watchService.broadcastToRoom(payload.roomId, RoomEvent.QUEUE_UPDATED, {
-      queue,
-      currentIndex: room.currentIndex,
+      queue: result.queue,
+      currentIndex: result.currentIndex,
     });
 
-    return { event: RoomEvent.QUEUE_UPDATED, data: { queue } };
+    return {
+      event: RoomEvent.QUEUE_UPDATED,
+      data: { queue: result.queue },
+    };
   }
 
   @SubscribeMessage('reconnect-host')

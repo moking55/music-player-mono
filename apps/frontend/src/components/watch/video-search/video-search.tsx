@@ -31,7 +31,13 @@ export default function VideoSearch({
   onReorder,
   onRemove,
 }: VideoSearchProps) {
-  const { results, loading: searchLoading, error: searchError, search } = useYouTubeSearch();
+  const {
+    results,
+    loading: searchLoading,
+    error: searchError,
+    search,
+    clearResults,
+  } = useYouTubeSearch();
   const { fetchInfo, loading: oembedLoading, error: oembedError } = useYouTubeOEmbed();
 
   const [state, setState] = useImmer<VideoSearchState>({
@@ -130,7 +136,17 @@ export default function VideoSearch({
 
         {results.length > 0 && (
           <div className="p-3">
-            <h3 className="text-sm font-semibold text-gray-400 mb-2">Search Results</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-gray-400">Search Results</h3>
+              <button
+                type="button"
+                onClick={clearResults}
+                className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+                title="Clear search results"
+              >
+                Clear
+              </button>
+            </div>
             <ul className="space-y-2">
               {results.map((video) => (
                 <li
@@ -149,6 +165,8 @@ export default function VideoSearch({
                       handleAddToQueue(video.videoId, video.title, video.thumbnail)
                     }
                     className="p-2 text-blue-500 hover:text-blue-400"
+                    title="Add to queue"
+                    aria-label={`Add ${video.title} to queue`}
                   >
                     <Plus size={18} />
                   </button>

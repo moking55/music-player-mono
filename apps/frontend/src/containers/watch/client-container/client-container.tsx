@@ -201,8 +201,7 @@ export default function ClientContainer() {
 
       {currentMeme && (
         <MemeModal key="meme-modal"
-          base64={currentMeme.startsWith("data:") ? currentMeme : undefined}
-          imageUrl={currentMeme.startsWith("data:") ? undefined : currentMeme}
+          imageUrl={currentMeme}
         />
       )}
 
@@ -281,7 +280,7 @@ export default function ClientContainer() {
                     {uploading ? "Uploading..." : "Choose Image"}
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];

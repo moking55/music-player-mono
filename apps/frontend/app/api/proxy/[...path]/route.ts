@@ -32,10 +32,10 @@ async function proxyRequest(
   // Avoid compressed upstream payloads that can break when re-streamed through Next route handlers.
   headers.set("accept-encoding", "identity");
 
-  let body: string | undefined;
+  let body: ArrayBuffer | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {
-    const rawBody = await request.text();
-    body = rawBody.length > 0 ? rawBody : undefined;
+    const rawBody = await request.arrayBuffer();
+    body = rawBody.byteLength > 0 ? rawBody : undefined;
   }
 
   const response = await fetch(backendUrl, {

@@ -15,6 +15,7 @@
     "build:all": "npm run build --workspaces",
     "build:backend": "npm run build --workspace=backend",
     "build:frontend": "npm run build --workspace=frontend",
+    "build:shared-types": "npm run build --workspace=shared-types",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "install:all": "npm install",

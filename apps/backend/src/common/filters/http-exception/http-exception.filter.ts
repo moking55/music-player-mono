@@ -1,4 +1,5 @@
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { MulterError } from 'multer';
 
 import type {
   ErrorOptions,
@@ -34,6 +35,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
   }
 
   private getStatusCode(exception: unknown): number {
+    if (exception instanceof MulterError) {
+      return exception.code === 'LIMIT_FILE_SIZE'
+        ? HttpStatus.PAYLOAD_TOO_LARGE
+        : HttpStatus.BAD_REQUEST;
+    }
     return exception instanceof HttpException
       ? exception.getStatus()
       : HttpStatus.INTERNAL_SERVER_ERROR;
@@ -46,6 +52,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       403: 'Forbidden',
       404: 'Not Found',
       422: 'Unprocessable Entity',
+      413: 'Payload Too Large',
       500: 'Internal Server Error',
     };
     return statusMessages[status] || 'Error';

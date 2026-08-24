@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 
 import { IRoomRepository } from './repositories/room.repository.interface';
 import { roomRepositoryToken } from './repositories/room.repository.provider';
@@ -11,10 +12,29 @@ import type {
 } from 'shared-types';
 import type { Server } from 'socket.io';
 
+type QueueState = {
+  queue: VideoItem[];
+  currentIndex: number;
+  hostSocketId: string;
+};
+
+type AddToQueueResult = QueueState & {
+  firstVideo: VideoItem | null;
+};
+
+type QueueCommandResult = QueueState & {
+  video: VideoItem | null;
+};
+
+type RemoveQueueResult = QueueState & {
+  removedCurrent: boolean;
+};
+
 @Injectable()
 export class WatchTogetherService {
   private readonly logger = new Logger(WatchTogetherService.name);
   private server: Server | null = null;
+  private readonly queueLocks = new Map<string, Promise<void>>();
 
   constructor(
     @Inject(roomRepositoryToken)
@@ -119,62 +139,144 @@ export class WatchTogetherService {
     });
   }
 
+  async isSocketInRoom(roomId: string, socketId: string): Promise<boolean> {
+    const [clientRoomId, hostRoomId] = await Promise.all([
+      this.repository.getRoomIdBySocket(socketId),
+      this.repository.getRoomIdByHost(socketId),
+    ]);
+    return clientRoomId === roomId || hostRoomId === roomId;
+  }
+
+  private async withQueueLock<T>(
+    roomId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.queueLocks.get(roomId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.then(() => current);
+    this.queueLocks.set(roomId, queued);
+
+    await previous;
+    const lockToken = randomUUID();
+    let lockAcquired = false;
+    try {
+      while (
+        !(await this.repository.acquireQueueLock(roomId, lockToken, 10_000))
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      lockAcquired = true;
+      return await operation();
+    } finally {
+      try {
+        if (lockAcquired) {
+          await this.repository.releaseQueueLock(roomId, lockToken);
+        }
+      } finally {
+        release();
+        if (this.queueLocks.get(roomId) === queued) {
+          this.queueLocks.delete(roomId);
+        }
+      }
+    }
+  }
+
   async addToQueue(
     roomId: string,
     payload: AddToQueuePayload,
     addedBy?: string,
-  ): Promise<VideoItem[]> {
-    const room = await this.repository.getRoom(roomId);
-    if (!room) {
-      return [];
-    }
+  ): Promise<AddToQueueResult | null> {
+    return this.withQueueLock(roomId, async () => {
+      const room = await this.repository.getRoom(roomId);
+      if (!room) {
+        return null;
+      }
 
-    const videoItem: VideoItem = {
-      videoId: payload.videoId,
-      title: payload.title,
-      thumbnail: payload.thumbnail,
-      addedBy,
-    };
-    await this.repository.addToQueue(roomId, videoItem);
-    this.logger.log(`Video added to queue in room ${roomId}: ${payload.title}`);
+      const videoItem: VideoItem = {
+        videoId: payload.videoId,
+        title: payload.title,
+        thumbnail: payload.thumbnail,
+        addedBy,
+      };
+      await this.repository.addToQueue(roomId, videoItem);
+      this.logger.log(`Video added to queue in room ${roomId}: ${payload.title}`);
 
-    const updatedRoom = await this.repository.getRoom(roomId);
-    return updatedRoom?.queue ?? [];
+      const updatedRoom = await this.repository.getRoom(roomId);
+      if (!updatedRoom) {
+        return null;
+      }
+
+      let firstVideo: VideoItem | null = null;
+      if (updatedRoom.currentIndex === -1 && updatedRoom.queue.length > 0) {
+        updatedRoom.currentIndex = 0;
+        firstVideo = updatedRoom.queue[0];
+        await this.repository.setCurrentIndex(roomId, 0);
+        await this.repository.setForcePlayed(roomId, true);
+      }
+
+      return {
+        queue: updatedRoom.queue,
+        currentIndex: updatedRoom.currentIndex,
+        hostSocketId: updatedRoom.hostSocketId,
+        firstVideo,
+      };
+    });
   }
 
-  async getNextVideo(roomId: string): Promise<VideoItem | null> {
-    const room = await this.repository.getRoom(roomId);
-    if (!room || room.currentIndex < 0 || room.queue.length === 0) {
-      return null;
-    }
+  async getNextVideo(roomId: string): Promise<QueueCommandResult | null> {
+    return this.withQueueLock(roomId, async () => {
+      const room = await this.repository.getRoom(roomId);
+      if (!room || room.currentIndex < 0 || room.queue.length === 0) {
+        return null;
+      }
 
-    room.queue.splice(room.currentIndex, 1);
+      room.queue.splice(room.currentIndex, 1);
 
-    if (room.queue.length === 0) {
-      await this.repository.setQueue(roomId, []);
-      await this.repository.setCurrentIndex(roomId, -1);
-      this.logger.log(`Queue empty after removing last video in room ${roomId}`);
-      return null;
-    }
+      if (room.queue.length === 0) {
+        await this.repository.setQueue(roomId, []);
+        await this.repository.setCurrentIndex(roomId, -1);
+        await this.repository.setForcePlayed(roomId, false);
+        this.logger.log(`Queue empty after removing last video in room ${roomId}`);
+        return {
+          queue: [],
+          currentIndex: -1,
+          hostSocketId: room.hostSocketId,
+          video: null,
+        };
+      }
 
-    if (room.forcePlayed) {
-      room.currentIndex = 0;
-      await this.repository.setCurrentIndex(roomId, 0);
+      if (room.forcePlayed) {
+        room.currentIndex = 0;
+        await this.repository.setQueue(roomId, room.queue);
+        await this.repository.setCurrentIndex(roomId, 0);
+        await this.repository.setForcePlayed(roomId, false);
+        this.logger.log(`Force-played video ended, reset to index 0 in room ${roomId}`);
+        return {
+          queue: room.queue,
+          currentIndex: room.currentIndex,
+          hostSocketId: room.hostSocketId,
+          video: room.queue[0],
+        };
+      }
+
+      if (room.currentIndex >= room.queue.length) {
+        room.currentIndex = room.queue.length - 1;
+      }
+
       await this.repository.setQueue(roomId, room.queue);
-      await this.repository.setForcePlayed(roomId, false);
-      this.logger.log(`Force-played video ended, reset to index 0 in room ${roomId}`);
-      return room.queue[0];
-    }
+      await this.repository.setCurrentIndex(roomId, room.currentIndex);
 
-    if (room.currentIndex >= room.queue.length) {
-      room.currentIndex = room.queue.length - 1;
-    }
-
-    await this.repository.setQueue(roomId, room.queue);
-    await this.repository.setCurrentIndex(roomId, room.currentIndex);
-
-    this.logger.log(`Advanced to next video in room ${roomId}`);
-    return room.queue[room.currentIndex];
+      this.logger.log(`Advanced to next video in room ${roomId}`);
+      return {
+        queue: room.queue,
+        currentIndex: room.currentIndex,
+        hostSocketId: room.hostSocketId,
+        video: room.queue[room.currentIndex],
+      };
+    });
   }
 
   async getCurrentVideo(roomId: string): Promise<VideoItem | null> {
@@ -192,75 +294,118 @@ export class WatchTogetherService {
   async forcePlayVideo(
     roomId: string,
     index: number,
-  ): Promise<VideoItem | null> {
-    const room = await this.repository.getRoom(roomId);
-    if (!room || index < 0 || index >= room.queue.length) {
-      return null;
-    }
-    await this.repository.setCurrentIndex(roomId, index);
-    await this.repository.setForcePlayed(roomId, true);
-    this.logger.log(`Force play video at index ${index} in room ${roomId}`);
-    return room.queue[index];
+  ): Promise<QueueCommandResult | null> {
+    return this.withQueueLock(roomId, async () => {
+      const room = await this.repository.getRoom(roomId);
+      if (!room || index < 0 || index >= room.queue.length) {
+        return null;
+      }
+      await this.repository.setCurrentIndex(roomId, index);
+      await this.repository.setForcePlayed(roomId, true);
+      this.logger.log(`Force play video at index ${index} in room ${roomId}`);
+      return {
+        queue: room.queue,
+        currentIndex: index,
+        hostSocketId: room.hostSocketId,
+        video: room.queue[index],
+      };
+    });
   }
 
   async reorderQueue(
     roomId: string,
     fromIndex: number,
     toIndex: number,
-  ): Promise<VideoItem[]> {
-    const room = await this.repository.getRoom(roomId);
-    if (!room || fromIndex < 0 || fromIndex >= room.queue.length) {
-      return room?.queue ?? [];
-    }
-    if (toIndex < 0 || toIndex >= room.queue.length) {
-      return room.queue;
-    }
+  ): Promise<QueueState | null> {
+    return this.withQueueLock(roomId, async () => {
+      const room = await this.repository.getRoom(roomId);
+      if (!room || fromIndex < 0 || fromIndex >= room.queue.length) {
+        return room
+          ? {
+              queue: room.queue,
+              currentIndex: room.currentIndex,
+              hostSocketId: room.hostSocketId,
+            }
+          : null;
+      }
+      if (toIndex < 0 || toIndex >= room.queue.length) {
+        return {
+          queue: room.queue,
+          currentIndex: room.currentIndex,
+          hostSocketId: room.hostSocketId,
+        };
+      }
 
-    const [movedItem] = room.queue.splice(fromIndex, 1);
-    room.queue.splice(toIndex, 0, movedItem);
+      const [movedItem] = room.queue.splice(fromIndex, 1);
+      room.queue.splice(toIndex, 0, movedItem);
 
-    if (room.currentIndex === fromIndex) {
-      room.currentIndex = toIndex;
-    } else if (fromIndex < room.currentIndex && toIndex >= room.currentIndex) {
-      room.currentIndex -= 1;
-    } else if (fromIndex > room.currentIndex && toIndex <= room.currentIndex) {
-      room.currentIndex += 1;
-    }
+      if (room.currentIndex === fromIndex) {
+        room.currentIndex = toIndex;
+      } else if (fromIndex < room.currentIndex && toIndex >= room.currentIndex) {
+        room.currentIndex -= 1;
+      } else if (fromIndex > room.currentIndex && toIndex <= room.currentIndex) {
+        room.currentIndex += 1;
+      }
 
-    await this.repository.setQueue(roomId, room.queue);
-    await this.repository.setCurrentIndex(roomId, room.currentIndex);
+      await this.repository.setQueue(roomId, room.queue);
+      await this.repository.setCurrentIndex(roomId, room.currentIndex);
 
-    this.logger.log(
-      `Reordered queue in room ${roomId}: ${fromIndex} -> ${toIndex}`,
-    );
-    return room.queue;
+      this.logger.log(
+        `Reordered queue in room ${roomId}: ${fromIndex} -> ${toIndex}`,
+      );
+      return {
+        queue: room.queue,
+        currentIndex: room.currentIndex,
+        hostSocketId: room.hostSocketId,
+      };
+    });
   }
 
-  async removeFromQueue(roomId: string, index: number): Promise<VideoItem[]> {
-    const room = await this.repository.getRoom(roomId);
-    if (!room || index < 0 || index >= room.queue.length) {
-      return room?.queue ?? [];
-    }
-
-    room.queue.splice(index, 1);
-
-    if (room.currentIndex === index) {
-      if (room.queue.length === 0) {
-        room.currentIndex = -1;
-      } else if (room.currentIndex >= room.queue.length) {
-        room.currentIndex = room.queue.length - 1;
+  async removeFromQueue(
+    roomId: string,
+    index: number,
+  ): Promise<RemoveQueueResult | null> {
+    return this.withQueueLock(roomId, async () => {
+      const room = await this.repository.getRoom(roomId);
+      if (!room || index < 0 || index >= room.queue.length) {
+        return room
+          ? {
+              queue: room.queue,
+              currentIndex: room.currentIndex,
+              hostSocketId: room.hostSocketId,
+              removedCurrent: false,
+            }
+          : null;
       }
-    } else if (index < room.currentIndex) {
-      room.currentIndex -= 1;
-    }
 
-    await this.repository.setQueue(roomId, room.queue);
-    await this.repository.setCurrentIndex(roomId, room.currentIndex);
+      if (room.currentIndex === index) {
+        return {
+          queue: room.queue,
+          currentIndex: room.currentIndex,
+          hostSocketId: room.hostSocketId,
+          removedCurrent: false,
+        };
+      }
 
-    this.logger.log(
-      `Removed video at index ${index} from queue in room ${roomId}`,
-    );
-    return room.queue;
+      room.queue.splice(index, 1);
+
+      if (index < room.currentIndex) {
+        room.currentIndex -= 1;
+      }
+
+      await this.repository.setQueue(roomId, room.queue);
+      await this.repository.setCurrentIndex(roomId, room.currentIndex);
+
+      this.logger.log(
+        `Removed video at index ${index} from queue in room ${roomId}`,
+      );
+      return {
+        queue: room.queue,
+        currentIndex: room.currentIndex,
+        hostSocketId: room.hostSocketId,
+        removedCurrent: false,
+      };
+    });
   }
 
   toRoomData(room: Awaited<ReturnType<IRoomRepository['getRoom']>>): RoomData {

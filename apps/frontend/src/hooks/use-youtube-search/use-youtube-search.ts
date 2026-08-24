@@ -60,10 +60,20 @@ export default function useYouTubeSearch() {
     [api, setState],
   );
 
+  const clearResults = useCallback(
+    () => {
+      setState((draft) => {
+        draft.results = [];
+      });
+    },
+    [setState],
+  );
+
   return {
     results: state.results,
     loading: state.loading,
     error: state.error,
     search,
+    clearResults,
   };
 }

@@ -115,6 +115,33 @@ export class RoomRedisRepository implements IRoomRepository {
     await this.refreshTTL(roomId);
   }
 
+  async acquireQueueLock(
+    roomId: string,
+    token: string,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const result = await this.redis.set(
+      `wt:queue-lock:${roomId}`,
+      token,
+      'PX',
+      ttlMs,
+      'NX',
+    );
+    return result === 'OK';
+  }
+
+  async releaseQueueLock(roomId: string, token: string): Promise<void> {
+    await this.redis.eval(
+      `if redis.call('get', KEYS[1]) == ARGV[1] then
+         return redis.call('del', KEYS[1])
+       end
+       return 0`,
+      1,
+      `wt:queue-lock:${roomId}`,
+      token,
+    );
+  }
+
   async getQueue(roomId: string): Promise<VideoItem[]> {
     const items = await this.redis.lrange(this.queueKey(roomId), 0, -1);
     return items.map((item) => JSON.parse(item) as VideoItem);

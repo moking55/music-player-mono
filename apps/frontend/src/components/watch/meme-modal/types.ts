@@ -1,5 +1,4 @@
 export type MemeModalProps = {
-  imageUrl?: string;
-  base64?: string;
+  imageUrl: string;
   onDismiss?: () => void;
 };

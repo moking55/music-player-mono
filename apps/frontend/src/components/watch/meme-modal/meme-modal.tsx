@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { MemeModalProps } from "./types";
 import ConfettiBomb from "@/components/watch/confetti-bomb";
 
-export default function MemeModal({ imageUrl, base64, onDismiss }: MemeModalProps) {
+export default function MemeModal({ imageUrl, onDismiss }: MemeModalProps) {
   const [showConfetti, setShowConfetti] = useState(true);
 
   useEffect(() => {
@@ -17,8 +17,6 @@ export default function MemeModal({ imageUrl, base64, onDismiss }: MemeModalProp
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [onDismiss]);
-
-  const src = base64 ?? imageUrl;
 
   return (
     <div
@@ -34,7 +32,7 @@ export default function MemeModal({ imageUrl, base64, onDismiss }: MemeModalProp
         onClick={(e) => e.stopPropagation()}
       >
         <img
-          src={src}
+          src={imageUrl}
           alt="Meme"
           className="w-full rounded-lg shadow-2xl"
         />

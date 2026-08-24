@@ -29,9 +29,9 @@ export default function useMeme(
     if (options.mode !== "receive") return;
 
     const handleMeme = (...args: unknown[]) => {
-      const data = args[0] as { imageUrl?: string; base64?: string };
+      const data = args[0] as { imageUrl?: string };
       setState((draft) => {
-        draft.currentMeme = data.base64 ?? data.imageUrl ?? null;
+        draft.currentMeme = data.imageUrl ?? null;
         draft.error = null;
       });
 
@@ -42,7 +42,7 @@ export default function useMeme(
         setState((draft) => {
           draft.currentMeme = null;
         });
-      }, 8000);
+      }, 10000);
     };
 
     on("meme", handleMeme);
@@ -59,10 +59,10 @@ export default function useMeme(
     async (file: File) => {
       if (!roomId) return;
 
-      const maxSize = 5 * 1024 * 1024;
+      const maxSize = 10 * 1024 * 1024;
       if (file.size > maxSize) {
         setState((draft) => {
-          draft.error = "Image must be under 5MB";
+          draft.error = "Image must be 10MB or smaller";
         });
         return;
       }
@@ -73,17 +73,27 @@ export default function useMeme(
       });
 
       try {
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
+        const formData = new FormData();
+        formData.append("roomId", roomId);
+        formData.append("file", file);
+        const response = await fetch("/api/proxy/watch/upload-meme", {
+          method: "POST",
+          body: formData,
         });
+        const data = (await response.json()) as {
+          imageUrl?: string;
+          errors?: Array<{ message?: string }>;
+        };
 
-        emit("send-meme", { roomId, base64 });
-      } catch {
+        if (!response.ok || !data.imageUrl) {
+          throw new Error(data.errors?.[0]?.message ?? "Meme upload failed");
+        }
+
+        emit("send-meme", { roomId, imageUrl: data.imageUrl });
+      } catch (error) {
         setState((draft) => {
-          draft.error = "Failed to process image";
+          draft.error =
+            error instanceof Error ? error.message : "Meme upload failed";
         });
       } finally {
         setState((draft) => {

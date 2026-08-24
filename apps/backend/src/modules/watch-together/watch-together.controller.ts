@@ -1,16 +1,15 @@
-import { mkdirSync, existsSync } from 'fs';
-import { extname, join } from 'path';
-
 import {
   Controller,
   Post,
   Get,
+  Body,
   Query,
   UploadedFile,
   UseInterceptors,
   HttpCode,
   HttpStatus,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -22,45 +21,45 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import axios from 'axios';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
+
+import { MemeStorageService } from './meme-storage.service';
+import { WatchTogetherService } from './watch-together.service';
 
 @ApiTags('watch')
 @Controller('watch')
 export class WatchTogetherController {
   private readonly logger = new Logger(WatchTogetherController.name);
-  private readonly uploadsDir: string;
 
-  constructor(private readonly configService: ConfigService) {
-    this.uploadsDir = join(process.cwd(), 'uploads');
-    if (!existsSync(this.uploadsDir)) {
-      mkdirSync(this.uploadsDir, { recursive: true });
-    }
-  }
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly memeStorageService: MemeStorageService,
+    private readonly watchTogetherService: WatchTogetherService,
+  ) {}
 
   @Post('upload-meme')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_req, _file, callback) => {
-          callback(null, join(process.cwd(), 'uploads'));
-        },
-        filename: (_req, file, callback) => {
-          const uniqueSuffix =
-            Date.now() + '-' + Math.round(Math.random() * 1e9);
-          const ext = extname(file.originalname);
-          callback(null, `meme-${uniqueSuffix}${ext}`);
-        },
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, callback) => {
-        if (file.mimetype.startsWith('image/')) {
+        if (
+          ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(
+            file.mimetype,
+          )
+        ) {
           callback(null, true);
         } else {
-          callback(new Error('Only image files are allowed'), false);
+          callback(
+            new BadRequestException(
+              'Only JPEG, PNG, GIF, and WebP images are allowed',
+            ),
+            false,
+          );
         }
       },
       limits: {
-        fileSize: 5 * 1024 * 1024,
+        fileSize: 10 * 1024 * 1024,
       },
     }),
   )
@@ -70,6 +69,10 @@ export class WatchTogetherController {
     schema: {
       type: 'object',
       properties: {
+        roomId: {
+          type: 'string',
+          description: 'Active room code',
+        },
         file: {
           type: 'string',
           format: 'binary',
@@ -87,9 +90,21 @@ export class WatchTogetherController {
       },
     },
   })
-  uploadMeme(@UploadedFile() file: Express.Multer.File) {
-    this.logger.log(`Meme uploaded: ${file.filename}`);
-    return { imageUrl: `/uploads/${file.filename}` };
+  @ApiResponse({
+    status: HttpStatus.PAYLOAD_TOO_LARGE,
+    description: 'Image exceeds the 10 MiB limit',
+  })
+  async uploadMeme(
+    @Body('roomId') roomId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!roomId || !(await this.watchTogetherService.getRoom(roomId))) {
+      throw new BadRequestException('Valid roomId is required');
+    }
+
+    const result = await this.memeStorageService.uploadMeme(file);
+    this.logger.log(`Meme uploaded to object storage: ${result.imageUrl}`);
+    return result;
   }
 
   @Get('youtube-search')

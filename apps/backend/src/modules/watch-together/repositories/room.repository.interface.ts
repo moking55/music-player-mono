@@ -23,6 +23,8 @@ export interface IRoomRepository {
   joinRoom(roomId: string, clientSocketId: string): Promise<void>;
   leaveRoom(roomId: string, clientSocketId: string): Promise<void>;
   addToQueue(roomId: string, item: VideoItem): Promise<void>;
+  acquireQueueLock(roomId: string, token: string, ttlMs: number): Promise<boolean>;
+  releaseQueueLock(roomId: string, token: string): Promise<void>;
   getQueue(roomId: string): Promise<VideoItem[]>;
   setQueue(roomId: string, queue: VideoItem[]): Promise<void>;
   updatePlayerState(roomId: string, state: PlayerState): Promise<void>;

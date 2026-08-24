@@ -68,6 +68,16 @@ export class RoomMemoryRepository implements IRoomRepository {
     }
   }
 
+  async acquireQueueLock(
+    _roomId: string,
+    _token: string,
+    _ttlMs: number,
+  ): Promise<boolean> {
+    return true;
+  }
+
+  async releaseQueueLock(_roomId: string, _token: string): Promise<void> {}
+
   async getQueue(roomId: string): Promise<VideoItem[]> {
     return this.rooms.get(roomId)?.queue ?? [];
   }

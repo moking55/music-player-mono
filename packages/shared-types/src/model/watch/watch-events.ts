@@ -22,7 +22,6 @@ export interface SendDanmuPayload {
 export interface SendMemePayload {
   roomId: string;
   imageUrl: string;
-  base64?: string;
 }
 
 export interface PlayerStateUpdatePayload {

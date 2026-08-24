@@ -246,8 +246,7 @@ export default function HostContainer() {
 
           {currentMeme && (
             <MemeModal
-              base64={currentMeme.startsWith("data:") ? currentMeme : undefined}
-              imageUrl={currentMeme.startsWith("data:") ? undefined : currentMeme}
+              imageUrl={currentMeme}
               onDismiss={dismissMeme}
             />
           )}
