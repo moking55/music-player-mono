@@ -8,11 +8,13 @@ import { usePlayerControl } from "@/hooks/use-player-control";
 import { useQueue } from "@/hooks/use-queue";
 import { useDanmu } from "@/hooks/use-danmu";
 import { useMeme } from "@/hooks/use-meme";
+import usePoll from "@/hooks/use-poll";
 import useSocket from "@/hooks/use-socket";
 import QRCode from "@/components/watch/qr-code";
 import QueuePanel from "@/components/watch/queue-panel";
 import DanmuOverlay from "@/components/watch/danmu-overlay";
 import MemeModal from "@/components/watch/meme-modal";
+import PollOverlay from "@/components/watch/poll-overlay";
 
 type YTPlayer = {
   getPlayerState: () => number;
@@ -66,6 +68,7 @@ export default function HostContainer() {
   } = useQueue(roomId);
   const { danmuList, removeDanmu } = useDanmu(roomId, { mode: "receive" });
   const { currentMeme, dismissMeme } = useMeme(roomId, { mode: "receive" });
+  const { poll, timeRemainingMs } = usePoll(roomId, { mode: "receive" });
   const { emit } = useSocket();
 
   const [state, setState] = useImmer<HostState>({
@@ -250,6 +253,8 @@ export default function HostContainer() {
               onDismiss={dismissMeme}
             />
           )}
+
+          <PollOverlay poll={poll} timeRemainingMs={timeRemainingMs} />
 
           {queue.length === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center z-10">

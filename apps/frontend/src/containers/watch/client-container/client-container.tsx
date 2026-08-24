@@ -9,11 +9,13 @@ import { usePlayerControl } from "@/hooks/use-player-control";
 import { useQueue } from "@/hooks/use-queue";
 import { useDanmu } from "@/hooks/use-danmu";
 import { useMeme } from "@/hooks/use-meme";
+import usePoll from "@/hooks/use-poll";
 import TabNavigation from "@/components/watch/tab-navigation";
 import VideoSearch from "@/components/watch/video-search";
 import PlaybackControls from "@/components/watch/playback-controls";
 import DanmuOverlay from "@/components/watch/danmu-overlay";
 import MemeModal from "@/components/watch/meme-modal";
+import PollPanel from "@/components/watch/poll-panel";
 
 import type { ClientState } from "./types";
 
@@ -53,6 +55,7 @@ export default function ClientContainer() {
   const { queue, currentIndex, addToQueue, forcePlay, reorderQueue: reorderQueueFn, removeFromQueue: removeQueueFn } = useQueue(roomId);
   const { danmuList, sendDanmu } = useDanmu(roomId, { mode: "send" });
   const { currentMeme, uploading, error: memeError, sendMeme } = useMeme(roomId, { mode: "send" });
+  const { poll, hasVoted, selectedChoice, error: pollError, timeRemainingMs, createPoll, vote } = usePoll(roomId, { mode: "send" });
 
   const [state, setState] = useImmer<ClientState>({
     activeTab: "queue",
@@ -133,7 +136,7 @@ export default function ClientContainer() {
     }
   }, [playerState.currentTime, playerState.videoId]);
 
-  const handleTabChange = (tab: "queue" | "danmu" | "meme") => {
+  const handleTabChange = (tab: "queue" | "danmu" | "meme" | "poll") => {
     setState((draft) => {
       draft.activeTab = tab;
     });
@@ -224,7 +227,7 @@ export default function ClientContainer() {
             onSeek={handleSeek}
           />
 
-          <TabNavigation activeTab={state.activeTab} onTabChange={handleTabChange} />
+          <TabNavigation activeTab={state.activeTab} onTabChange={handleTabChange} hasActivePoll={poll?.status === "active"} />
 
           <div className="flex-1 overflow-hidden">
             {state.activeTab === "queue" && (
@@ -294,6 +297,17 @@ export default function ClientContainer() {
                   {memeError && <p className="mt-2 text-red-500">{memeError}</p>}
                 </div>
               </div>
+            )}
+            {state.activeTab === "poll" && createPoll && vote && (
+              <PollPanel
+                poll={poll}
+                hasVoted={hasVoted}
+                selectedChoice={selectedChoice}
+                error={pollError}
+                timeRemainingMs={timeRemainingMs}
+                onCreate={createPoll}
+                onVote={vote}
+              />
             )}
           </div>
         </div>

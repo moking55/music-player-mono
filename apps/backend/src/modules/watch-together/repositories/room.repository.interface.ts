@@ -1,4 +1,4 @@
-import type { VideoItem } from 'shared-types';
+import type { PollChoice, PollState, VideoItem } from 'shared-types';
 
 export interface PlayerState {
   playing: boolean;
@@ -43,5 +43,12 @@ export interface IRoomRepository {
   incrementClientCount(roomId: string): Promise<number>;
   decrementClientCount(roomId: string): Promise<number>;
   setForcePlayed(roomId: string, forcePlayed: boolean): Promise<void>;
+  getPoll(roomId: string): Promise<PollState | null>;
+  setPoll(roomId: string, poll: PollState): Promise<void>;
+  clearPoll(roomId: string): Promise<void>;
+  getPollVote(roomId: string, pollId: string, voterId: string): Promise<PollChoice | null>;
+  setPollVote(roomId: string, pollId: string, voterId: string, choice: PollChoice): Promise<void>;
+  acquirePollLock(roomId: string, token: string, ttlMs: number): Promise<boolean>;
+  releasePollLock(roomId: string, token: string): Promise<void>;
   refreshTTL(roomId: string): Promise<void>;
 }

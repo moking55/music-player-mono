@@ -1,15 +1,16 @@
 "use client";
 
 import clsx from "clsx";
-import { List, MessageSquare, Image } from "lucide-react";
+import { List, MessageSquare, Image, BarChart3 } from "lucide-react";
 
 import type { TabNavigationProps } from "./types";
 
-export default function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
+export default function TabNavigation({ activeTab, onTabChange, hasActivePoll }: TabNavigationProps) {
   const tabs = [
     { id: "queue" as const, label: "Queue", icon: List },
     { id: "danmu" as const, label: "Danmu", icon: MessageSquare },
     { id: "meme" as const, label: "Meme", icon: Image },
+    { id: "poll" as const, label: "Poll", icon: BarChart3 },
   ];
 
   return (
@@ -30,6 +31,7 @@ export default function TabNavigation({ activeTab, onTabChange }: TabNavigationP
           >
             <Icon size={16} />
             <span>{tab.label}</span>
+            {tab.id === "poll" && hasActivePoll && <span className="h-2 w-2 rounded-full bg-emerald-400" aria-label="Active poll" />}
           </button>
         );
       })}

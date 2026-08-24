@@ -9,6 +9,9 @@ import type {
   RoomData,
   PlayerStateUpdatePayload,
   AddToQueuePayload,
+  PollChoice,
+  PollDuration,
+  PollState,
 } from 'shared-types';
 import type { Server } from 'socket.io';
 
@@ -30,11 +33,17 @@ type RemoveQueueResult = QueueState & {
   removedCurrent: boolean;
 };
 
+type PollVoteResult = {
+  poll: PollState | null;
+  outcome: 'accepted' | 'already-voted' | 'expired' | 'not-found';
+};
+
 @Injectable()
 export class WatchTogetherService {
   private readonly logger = new Logger(WatchTogetherService.name);
   private server: Server | null = null;
   private readonly queueLocks = new Map<string, Promise<void>>();
+  private readonly pollLocks = new Map<string, Promise<void>>();
 
   constructor(
     @Inject(roomRepositoryToken)
@@ -182,6 +191,158 @@ export class WatchTogetherService {
         }
       }
     }
+  }
+
+  private async withPollLock<T>(
+    roomId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.pollLocks.get(roomId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.then(() => current);
+    this.pollLocks.set(roomId, queued);
+
+    await previous;
+    const lockToken = randomUUID();
+    let lockAcquired = false;
+    try {
+      while (
+        !(await this.repository.acquirePollLock(roomId, lockToken, 10_000))
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      lockAcquired = true;
+      return await operation();
+    } finally {
+      try {
+        if (lockAcquired) {
+          await this.repository.releasePollLock(roomId, lockToken);
+        }
+      } finally {
+        release();
+        if (this.pollLocks.get(roomId) === queued) {
+          this.pollLocks.delete(roomId);
+        }
+      }
+    }
+  }
+
+  private async normalizePoll(
+    roomId: string,
+    poll: PollState | null,
+  ): Promise<PollState | null> {
+    if (!poll) {
+      return null;
+    }
+
+    const now = Date.now();
+    if (now < poll.expiresAt) {
+      return poll.status === 'active'
+        ? poll
+        : { ...poll, status: 'active' };
+    }
+
+    if (now < poll.expiresAt + 5_000) {
+      if (poll.status !== 'ended') {
+        const endedPoll = { ...poll, status: 'ended' as const };
+        await this.repository.setPoll(roomId, endedPoll);
+        return endedPoll;
+      }
+      return poll;
+    }
+
+    await this.repository.clearPoll(roomId);
+    return null;
+  }
+
+  async getPollState(roomId: string): Promise<PollState | null> {
+    return this.normalizePoll(roomId, await this.repository.getPoll(roomId));
+  }
+
+  async createPoll(
+    roomId: string,
+    question: string,
+    duration: PollDuration,
+  ): Promise<PollState | null> {
+    return this.withPollLock(roomId, async () => {
+      const room = await this.repository.getRoom(roomId);
+      if (!room) {
+        return null;
+      }
+
+      const currentPoll = await this.normalizePoll(
+        roomId,
+        await this.repository.getPoll(roomId),
+      );
+      if (currentPoll?.status === 'active') {
+        return null;
+      }
+
+      const startedAt = Date.now();
+      const poll: PollState = {
+        pollId: randomUUID(),
+        question: question.trim(),
+        duration,
+        startedAt,
+        expiresAt: startedAt + duration * 1_000,
+        status: 'active',
+        yesCount: 0,
+        noCount: 0,
+      };
+      await this.repository.clearPoll(roomId);
+      await this.repository.setPoll(roomId, poll);
+      return poll;
+    });
+  }
+
+  async votePoll(
+    roomId: string,
+    pollId: string,
+    voterId: string,
+    choice: PollChoice,
+  ): Promise<PollVoteResult> {
+    return this.withPollLock(roomId, async () => {
+      const poll = await this.normalizePoll(
+        roomId,
+        await this.repository.getPoll(roomId),
+      );
+      if (!poll || poll.pollId !== pollId) {
+        return { poll, outcome: 'not-found' };
+      }
+      if (poll.status !== 'active' || Date.now() >= poll.expiresAt) {
+        return { poll, outcome: 'expired' };
+      }
+      if (await this.repository.getPollVote(roomId, pollId, voterId)) {
+        return { poll, outcome: 'already-voted' };
+      }
+
+      const updatedPoll: PollState = {
+        ...poll,
+        yesCount: poll.yesCount + (choice === 'yes' ? 1 : 0),
+        noCount: poll.noCount + (choice === 'no' ? 1 : 0),
+      };
+      await this.repository.setPoll(roomId, updatedPoll);
+      await this.repository.setPollVote(roomId, pollId, voterId, choice);
+      return { poll: updatedPoll, outcome: 'accepted' };
+    });
+  }
+
+  async getPollVoteStatus(
+    roomId: string,
+    pollId: string,
+    voterId: string,
+  ): Promise<{ poll: PollState | null; hasVoted: boolean }> {
+    const poll = await this.getPollState(roomId);
+    if (!poll || poll.pollId !== pollId) {
+      return { poll, hasVoted: false };
+    }
+    return {
+      poll,
+      hasVoted: Boolean(await this.repository.getPollVote(roomId, pollId, voterId)),
+    };
   }
 
   async addToQueue(

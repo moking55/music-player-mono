@@ -14,6 +14,9 @@ import {
   SeekPayload,
   SendDanmuPayload,
   SendMemePayload,
+  CreatePollPayload,
+  VotePollPayload,
+  PollStatusPayload,
 } from 'shared-types';
 import { Server, Socket } from 'socket.io';
 import { WsException } from '@nestjs/websockets';
@@ -112,6 +115,10 @@ export class WatchTogetherGateway
       queue: roomData.queue,
       currentIndex: roomData.currentIndex,
     });
+    client.emit(
+      RoomEvent.POLL_UPDATED,
+      await this.watchService.getPollState(payload.roomId),
+    );
 
     this.watchService.broadcastToRoom(
       payload.roomId,
@@ -296,6 +303,114 @@ export class WatchTogetherGateway
     return { event: RoomEvent.MEME, data: memeData };
   }
 
+  @SubscribeMessage(RoomEvent.CREATE_POLL)
+  async handleCreatePoll(
+    @MessageBody() payload: CreatePollPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
+
+    const question = typeof payload.question === 'string'
+      ? payload.question.trim()
+      : '';
+    const validDuration = [30, 60, 120].includes(payload.duration);
+    if (question.length < 5 || question.length > 200 || !validDuration) {
+      client.emit(RoomEvent.POLL_ERROR, {
+        message: 'Question must be 5–200 characters and duration must be 30, 60, or 120 seconds',
+      });
+      return;
+    }
+
+    const poll = await this.watchService.createPoll(
+      payload.roomId,
+      question,
+      payload.duration,
+    );
+    if (!poll) {
+      client.emit(RoomEvent.POLL_ERROR, {
+        message: 'A poll is already active',
+      });
+      return;
+    }
+
+    this.watchService.broadcastToRoom(
+      payload.roomId,
+      RoomEvent.POLL_UPDATED,
+      poll,
+    );
+    return { event: RoomEvent.POLL_UPDATED, data: poll };
+  }
+
+  @SubscribeMessage(RoomEvent.VOTE_POLL)
+  async handleVotePoll(
+    @MessageBody() payload: VotePollPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
+    if (
+      typeof payload.voterId !== 'string' ||
+      payload.voterId.length < 16 ||
+      !['yes', 'no'].includes(payload.choice)
+    ) {
+      client.emit(RoomEvent.POLL_ERROR, { message: 'Invalid poll vote' });
+      return;
+    }
+
+    const result = await this.watchService.votePoll(
+      payload.roomId,
+      payload.pollId,
+      payload.voterId,
+      payload.choice,
+    );
+    if (result.poll) {
+      this.watchService.broadcastToRoom(
+        payload.roomId,
+        RoomEvent.POLL_UPDATED,
+        result.poll,
+      );
+    }
+    if (result.outcome !== 'accepted') {
+      client.emit(RoomEvent.POLL_ERROR, {
+        message:
+          result.outcome === 'already-voted'
+            ? 'You already voted in this poll'
+            : result.outcome === 'expired'
+              ? 'This poll has ended'
+              : 'Poll not found',
+      });
+      return;
+    }
+
+    return { event: RoomEvent.POLL_UPDATED, data: result.poll };
+  }
+
+  @SubscribeMessage(RoomEvent.GET_POLL_STATUS)
+  async handleGetPollStatus(
+    @MessageBody() payload: PollStatusPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!(await this.isAuthorized(payload.roomId, client.id))) {
+      return;
+    }
+    const result = await this.watchService.getPollVoteStatus(
+      payload.roomId,
+      payload.pollId,
+      payload.voterId,
+    );
+    client.emit(RoomEvent.POLL_VOTE_STATUS, {
+      pollId: payload.pollId,
+      hasVoted: result.hasVoted,
+    });
+    return {
+      event: RoomEvent.POLL_VOTE_STATUS,
+      data: { pollId: payload.pollId, hasVoted: result.hasVoted },
+    };
+  }
+
   @SubscribeMessage(RoomEvent.FORCE_PLAY)
   async handleForcePlay(
     @MessageBody() payload: { roomId: string; index: number },
@@ -425,6 +540,10 @@ export class WatchTogetherGateway
         queue: room.queue,
         currentIndex: room.currentIndex,
       });
+      client.emit(
+        RoomEvent.POLL_UPDATED,
+        await this.watchService.getPollState(payload.roomId),
+      );
 
       const currentVideo =
         room.currentIndex >= 0 && room.currentIndex < room.queue.length

@@ -5,7 +5,7 @@ import type {
   InternalRoom,
   PlayerState,
 } from './room.repository.interface';
-import type { VideoItem } from 'shared-types';
+import type { PollChoice, PollState, VideoItem } from 'shared-types';
 
 @Injectable()
 export class RoomMemoryRepository implements IRoomRepository {
@@ -13,6 +13,8 @@ export class RoomMemoryRepository implements IRoomRepository {
   private readonly rooms = new Map<string, InternalRoom>();
   private readonly socketToRoom = new Map<string, string>();
   private readonly hostToRoom = new Map<string, string>();
+  private readonly polls = new Map<string, PollState>();
+  private readonly pollVotes = new Map<string, Map<string, PollChoice>>();
 
   async createRoom(roomId: string, hostSocketId: string): Promise<void> {
     this.rooms.set(roomId, {
@@ -42,6 +44,8 @@ export class RoomMemoryRepository implements IRoomRepository {
       this.hostToRoom.delete(room.hostSocketId);
     }
     this.rooms.delete(roomId);
+    this.polls.delete(roomId);
+    this.pollVotes.delete(roomId);
     this.logger.debug(`Room deleted from memory: ${roomId}`);
   }
 
@@ -190,6 +194,51 @@ export class RoomMemoryRepository implements IRoomRepository {
       room.forcePlayed = forcePlayed;
     }
   }
+
+  async getPoll(roomId: string): Promise<PollState | null> {
+    return this.polls.get(roomId) ?? null;
+  }
+
+  async setPoll(roomId: string, poll: PollState): Promise<void> {
+    this.polls.set(roomId, poll);
+  }
+
+  async clearPoll(roomId: string): Promise<void> {
+    this.polls.delete(roomId);
+    this.pollVotes.delete(roomId);
+  }
+
+  async getPollVote(
+    roomId: string,
+    _pollId: string,
+    voterId: string,
+  ): Promise<PollChoice | null> {
+    return this.pollVotes.get(roomId)?.get(voterId) ?? null;
+  }
+
+  async setPollVote(
+    roomId: string,
+    _pollId: string,
+    voterId: string,
+    choice: PollChoice,
+  ): Promise<void> {
+    let votes = this.pollVotes.get(roomId);
+    if (!votes) {
+      votes = new Map<string, PollChoice>();
+      this.pollVotes.set(roomId, votes);
+    }
+    votes.set(voterId, choice);
+  }
+
+  async acquirePollLock(
+    _roomId: string,
+    _token: string,
+    _ttlMs: number,
+  ): Promise<boolean> {
+    return true;
+  }
+
+  async releasePollLock(_roomId: string, _token: string): Promise<void> {}
 
   async refreshTTL(): Promise<void> {
     // No-op for in-memory

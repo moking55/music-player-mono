@@ -45,3 +45,22 @@ export interface RemoveFromQueuePayload {
   roomId: string;
   index: number;
 }
+
+export interface CreatePollPayload {
+  roomId: string;
+  question: string;
+  duration: import('./poll').PollDuration;
+}
+
+export interface VotePollPayload {
+  roomId: string;
+  pollId: string;
+  voterId: string;
+  choice: import('./poll').PollChoice;
+}
+
+export interface PollStatusPayload {
+  roomId: string;
+  pollId: string;
+  voterId: string;
+}

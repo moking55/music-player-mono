@@ -6,7 +6,7 @@ import type {
   InternalRoom,
   PlayerState,
 } from './room.repository.interface';
-import type { VideoItem } from 'shared-types';
+import type { PollChoice, PollState, VideoItem } from 'shared-types';
 
 const roomTtl = 3600;
 
@@ -24,10 +24,24 @@ export class RoomRedisRepository implements IRoomRepository {
     return `wt:queue:${roomId}`;
   }
 
+  private pollKey(roomId: string) {
+    return `wt:poll:${roomId}`;
+  }
+
+  private pollVotesKey(roomId: string) {
+    return `wt:poll-votes:${roomId}`;
+  }
+
+  private pollLockKey(roomId: string) {
+    return `wt:poll-lock:${roomId}`;
+  }
+
   private async setTTL(roomId: string) {
     const pipeline = this.redis.pipeline();
     pipeline.expire(this.roomKey(roomId), roomTtl);
     pipeline.expire(this.queueKey(roomId), roomTtl);
+    pipeline.expire(this.pollKey(roomId), roomTtl);
+    pipeline.expire(this.pollVotesKey(roomId), roomTtl);
     await pipeline.exec();
   }
 
@@ -85,6 +99,8 @@ export class RoomRedisRepository implements IRoomRepository {
     const pipeline = this.redis.pipeline();
     pipeline.del(this.roomKey(roomId));
     pipeline.del(this.queueKey(roomId));
+    pipeline.del(this.pollKey(roomId));
+    pipeline.del(this.pollVotesKey(roomId));
     pipeline.del(`wt:clients:${roomId}`);
     if (roomData.hostSocketId) {
       pipeline.hdel('wt:host-map', roomData.hostSocketId);
@@ -256,6 +272,68 @@ export class RoomRedisRepository implements IRoomRepository {
       String(forcePlayed),
     );
     await this.refreshTTL(roomId);
+  }
+
+  async getPoll(roomId: string): Promise<PollState | null> {
+    const poll = await this.redis.get(this.pollKey(roomId));
+    return poll ? (JSON.parse(poll) as PollState) : null;
+  }
+
+  async setPoll(roomId: string, poll: PollState): Promise<void> {
+    await this.redis.set(this.pollKey(roomId), JSON.stringify(poll));
+    await this.refreshTTL(roomId);
+  }
+
+  async clearPoll(roomId: string): Promise<void> {
+    await this.redis.del(this.pollKey(roomId), this.pollVotesKey(roomId));
+  }
+
+  async getPollVote(
+    roomId: string,
+    _pollId: string,
+    voterId: string,
+  ): Promise<PollChoice | null> {
+    return (await this.redis.hget(
+      this.pollVotesKey(roomId),
+      voterId,
+    )) as PollChoice | null;
+  }
+
+  async setPollVote(
+    roomId: string,
+    _pollId: string,
+    voterId: string,
+    choice: PollChoice,
+  ): Promise<void> {
+    await this.redis.hset(this.pollVotesKey(roomId), voterId, choice);
+    await this.refreshTTL(roomId);
+  }
+
+  async acquirePollLock(
+    roomId: string,
+    token: string,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const result = await this.redis.set(
+      this.pollLockKey(roomId),
+      token,
+      'PX',
+      ttlMs,
+      'NX',
+    );
+    return result === 'OK';
+  }
+
+  async releasePollLock(roomId: string, token: string): Promise<void> {
+    await this.redis.eval(
+      `if redis.call('get', KEYS[1]) == ARGV[1] then
+         return redis.call('del', KEYS[1])
+       end
+       return 0`,
+      1,
+      this.pollLockKey(roomId),
+      token,
+    );
   }
 
   async refreshTTL(roomId: string): Promise<void> {

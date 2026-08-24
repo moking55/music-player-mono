@@ -7,6 +7,7 @@ export type { Users } from "./model/users";
 export type { ProductStatus } from "./enums/product-status";
 export type { Product } from "./model/product";
 export type { VideoItem, PlayerStateData, RoomData } from "./model/watch/room";
+export type { PollChoice, PollDuration, PollState, PollStatus } from "./model/watch/poll";
 export type {
   JoinRoomPayload,
   AddToQueuePayload,
@@ -16,4 +17,7 @@ export type {
   PlayerStateUpdatePayload,
   ForcePlayPayload,
   ReorderQueuePayload,
+  CreatePollPayload,
+  VotePollPayload,
+  PollStatusPayload,
 } from "./model/watch/watch-events";
